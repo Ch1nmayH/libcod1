@@ -833,8 +833,8 @@ void gsc_player_getcountry(scr_entref_t ref)
     CURLcode res;
     if (curl)
     {
-        std::string provider = "https://ipinfo.io/"; // Geolocation API
-        std::string url = provider + ipStr + "/json";
+        std::string provider = "https://api.iplocation.net/?&ip="; // Geolocation API
+        std::string url = provider + ipStr;
         std::string response_string;
 
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
@@ -850,9 +850,9 @@ void gsc_player_getcountry(scr_entref_t ref)
                 // Parse the JSON response
                 nlohmann::json j = nlohmann::json::parse(response_string);
 
-                if (j.contains("country") && j["country"].is_string())
+                if (j.contains("country_name") && j["country_name"].is_string())
                 {
-                    std::string country = j["country"];
+                    std::string country = j["country_name"];
                     countryMap[ipStr] = country;  // Cache the country
 
                     // Push the country onto the stack
