@@ -1,6 +1,7 @@
 #include "shared.hpp"
 
 #if COMPILE_CURL == 1
+
 struct WebhookData
 {
     std::string url;
@@ -8,6 +9,24 @@ struct WebhookData
     std::string message;
     int color;  // Added color as an integer field
 };
+
+// Function to escape special characters in JSON strings
+std::string escapeJson(const std::string &input) {
+    std::string output;
+    for (char c : input) {
+        switch (c) {
+            case '\"': output += "\\\""; break; // Escape double quotes
+            case '\\': output += "\\\\"; break; // Escape backslashes
+            case '\b': output += "\\b"; break;   // Escape backspace
+            case '\f': output += "\\f"; break;   // Escape formfeed
+            case '\n': output += "\\n"; break;   // Escape newline
+            case '\r': output += "\\r"; break;   // Escape carriage return
+            case '\t': output += "\\t"; break;   // Escape tab
+            default: output += c; break;         // Copy the character as-is
+        }
+    }
+    return output;
+}
 
 void async_webhook_message(std::shared_ptr<WebhookData> data)
 {
@@ -18,11 +37,14 @@ void async_webhook_message(std::shared_ptr<WebhookData> data)
     // Construct a more detailed payload with title, message (description), and custom color
     std::string payload = R"({
         "embeds": [{
-            "title": ")" + data->title + R"(",         // Insert the title
-            "description": ")" + data->message + R"(",  // The message becomes the description
+            "title": ")" + escapeJson(data->title) + R"(",         // Insert the title
+            "description": ")" + escapeJson(data->message) + R"(",  // The message becomes the description
             "color": )" + std::to_string(data->color) + R"(    // Insert the custom color
         }]
     })";
+
+    // Log the payload to check its structure
+    Com_Printf("Payload: %s\n", payload.c_str());
 
     curl_global_init(CURL_GLOBAL_ALL);
     curl = curl_easy_init();

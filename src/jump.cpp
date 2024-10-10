@@ -56,7 +56,7 @@ extern "C" void setJumpHeight()
 {
     float height = getJumpHeight() * 2;
     asm volatile (
-        "fmul %0\n"
+        "fmuls %0\n"
         :
         : "m"(height)
         :);
@@ -73,7 +73,7 @@ __attribute__ ((naked)) void hook_Jump_Check_Naked_2()
 {
     asm volatile (
         "mov (%%ebx), %%eax\n"
-        "fld 0x1C(%%eax)\n"
+        "flds 0x1C(%%eax)\n"
 
         "pushal\n"
         "call setJumpHeight_2\n"
@@ -88,7 +88,7 @@ extern "C" void setJumpHeight_2()
 {
     float height = getJumpHeight();
     asm volatile (
-        "fadd %0\n"
+        "fadds %0\n"
         :
         : "m"(height)
         :);
