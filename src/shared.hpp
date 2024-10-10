@@ -1,6 +1,8 @@
 #ifndef _SHARED_HPP_
 #define _SHARED_HPP_
 
+
+#include <maxminddb.h> // MaxMind DB library for GeoLite2
 #include <unistd.h>     // access
 #include <stdint.h>     // uint16_t
 #include <cstdio>       // printf, snprintf

@@ -84,6 +84,22 @@ else
     constants+=" -D COMPILE_SQLITE=0"
 fi
 
+maxminddb_found=0
+maxminddb_link=""
+maxminddb_libpath="/usr/lib/i386-linux-gnu/libmaxminddb.so"
+echo -n "$list_item"
+echo -n "MaxMind DB: "
+if [ -e "$maxminddb_libpath" ]; then
+    maxminddb_found=1
+    maxminddb_link="-lmaxminddb"
+    constants+=" -D COMPILE_MAXMINDDB=1"
+    echo "ON"
+else
+    echo "requested but lib not found, aborting."
+    exit 1
+fi
+
+
 curl_found=0
 curl_link=""
 curl_libpath="/usr/lib/i386-linux-gnu/libcurl.so.4"
@@ -193,7 +209,8 @@ fi
 echo -n "Linking libcod1.so"
 echo $wait_indicator
 objects="$(ls objects/*.opp)"
-$cc -m32 -shared -L/lib32 -o ../bin/libcod1.so -ldl $objects -lpthread $sqlite_link $curl_link $ssl_link
+$cc -m32 -shared -L/lib32 -o ../bin/libcod1.so -ldl $objects -lpthread $sqlite_link $curl_link $ssl_link $maxminddb_link
+
 
 echo $separator
 
