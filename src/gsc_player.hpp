@@ -16,7 +16,7 @@ void gsc_player_setuserinfo(scr_entref_t ref);
 void gsc_player_getip(scr_entref_t ref);
 
 void gsc_player_getping(scr_entref_t ref);
-void gsc_player_getcountry(scr_entref_t ref); 
+void gsc_player_getcountryusingmmdb(scr_entref_t ref); 
 void gsc_player_processclientcommand(scr_entref_t ref);
 void gsc_player_dropclient(scr_entref_t ref);
 void gsc_player_setspeed(scr_entref_t ref);

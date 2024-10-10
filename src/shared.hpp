@@ -1,6 +1,8 @@
 #ifndef _SHARED_HPP_
 #define _SHARED_HPP_
 
+// Declare the function prototype for lookup_country_by_ip
+const char* lookup_country_by_ip(const char* ip);
 
 #include <maxminddb.h> // MaxMind DB library for GeoLite2
 #include <unistd.h>     // access

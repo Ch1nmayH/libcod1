@@ -719,7 +719,7 @@ void gsc_player_ishiddenfromscoreboard(scr_entref_t ref)
 }
 
 
-void gsc_player_getcountry(scr_entref_t ref)
+void gsc_player_getcountryusingmmdb(scr_entref_t ref)
 {
     int id = ref.entnum;
 
