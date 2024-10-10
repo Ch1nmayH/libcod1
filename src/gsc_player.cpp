@@ -1,4 +1,10 @@
 #include "shared.hpp"
+#include <curl/curl.h>
+#include "vendor/json.hpp"
+
+
+using json = nlohmann::json;
+
 
 extern cvar_t *player_sprintTime;
 
@@ -782,4 +788,95 @@ const char* lookup_country_by_ip(const char* ip)
     MMDB_close(&mmdb);
 
     return country;  // Return the country name or "Unknown"
+}
+
+
+// A map to cache IP to country lookups
+std::map<std::string, std::string> countryMap;
+
+size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp)
+{
+    ((std::string*)userp)->append((char*)contents, size * nmemb);
+    return size * nmemb;
+}
+
+void gsc_player_getcountry(scr_entref_t ref)
+{
+    int id = ref.entnum;
+
+    if (id >= MAX_CLIENTS)
+    {
+        stackError("gsc_player_getcountry() entity %i is not a player", id);
+        stackPushUndefined();
+        return;
+    }
+
+    client_t *client = &svs.clients[id];
+    char ip[16];
+
+    snprintf(ip, sizeof(ip), "%d.%d.%d.%d",
+        client->netchan.remoteAddress.ip[0],
+        client->netchan.remoteAddress.ip[1],
+        client->netchan.remoteAddress.ip[2],
+        client->netchan.remoteAddress.ip[3]);
+
+    std::string ipStr(ip);
+
+    // Check if IP is already cached in countryMap
+    if (countryMap.find(ipStr) != countryMap.end())
+    {
+        stackPushString(countryMap[ipStr].c_str());
+        return;
+    }
+
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    if (curl)
+    {
+        std::string provider = "https://ipinfo.io/"; // Geolocation API
+        std::string url = provider + ipStr + "/json";
+        std::string response_string;
+
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
+        res = curl_easy_perform(curl);
+        curl_easy_cleanup(curl);
+
+        if (res == CURLE_OK)
+        {
+            try
+            {
+                // Parse the JSON response
+                nlohmann::json j = nlohmann::json::parse(response_string);
+
+                if (j.contains("country") && j["country"].is_string())
+                {
+                    std::string country = j["country"];
+                    countryMap[ipStr] = country;  // Cache the country
+
+                    // Push the country onto the stack
+                    stackPushString(country.c_str());
+                    return;
+                }
+            }
+            catch (const std::exception& e)
+            {
+                stackError("gsc_player_getcountry() failed to parse JSON: %s", e.what());
+                stackPushUndefined();
+                return;
+            }
+        }
+        else
+        {
+            stackError("gsc_player_getcountry() curl_easy_perform() failed: %s", curl_easy_strerror(res));
+        }
+    }
+    else
+    {
+        stackError("gsc_player_getcountry() failed to initialize curl");
+    }
+
+    // In case of failure, push undefined
+    stackPushUndefined();
 }

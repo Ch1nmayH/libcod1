@@ -87,6 +87,7 @@ else
     constants+=" -D COMPILE_SQLITE=0"
 fi
 
+
 maxminddb_found=0
 maxminddb_link=""
 maxminddb_libpath="/usr/lib/i386-linux-gnu/libmaxminddb.so"
@@ -101,11 +102,10 @@ if [ -v mmdb ]; then
     else
         echo "requested but lib not found, aborting."
         exit 1
-
-else 
+    fi
+else
     echo "OFF"
     constants+=" -D COMPILE_MAXMINDDB=0"
-
 fi
 
 
