@@ -345,7 +345,8 @@ void custom_Com_Init(char *commandLine)
     Cvar_Get("libcod", "1", CVAR_SERVERINFO);
     Cvar_Get("sv_wwwBaseURL", "", CVAR_ARCHIVE | CVAR_SYSTEMINFO);
     Cvar_Get("sv_wwwDownload", "0", CVAR_ARCHIVE | CVAR_SYSTEMINFO);
-    
+    Cvar_Get("cl_allowDownload", "1", CVAR_SYSTEMINFO);
+
     airjump_heightScale = Cvar_Get("airjump_heightScale", "1.5", CVAR_ARCHIVE);
     fs_callbacks = Cvar_Get("fs_callbacks", "maps/mp/gametypes/_callbacksetup", CVAR_ARCHIVE);
     fs_callbacks_additional = Cvar_Get("fs_callbacks_additional", "", CVAR_ARCHIVE);
@@ -1197,14 +1198,9 @@ void custom_SV_SendClientGameState(client_t *client)
                 }
                 else
                 {
-                    /*
-                    Fix for 1.1x extension requiring download forcing, even if player enables himself before joining.
-                    See: https://github.com/xtnded/codextended-client/blob/45af251518a390ab08b1c8713a6a1544b70114a1/cl_main.cpp#L41
-                    */
-                    if(*Info_ValueForKey(client->userinfo, "xtndedbuild") && sv_allowDownload->integer)
+                    // He will be forced to download the files if sv_allowDownload is enabled.
                         stringCopy.append("\\cl_allowDownload\\1");
 
-                    // We do not force cl_allowDownload, if a player doesn't want to download, we respect his choice.
                 }
             }
             MSG_WriteBigString(&msg, stringCopy.c_str());
