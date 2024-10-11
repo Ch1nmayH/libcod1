@@ -110,7 +110,6 @@ scr_method_t scriptMethods[] =
     {"getCountry", gsc_player_getcountry, 0},
 
     {"getIP", gsc_player_getip, 0},
-    {"getcountryusingmmdb", gsc_player_getcountryusingmmdb, 0},
     {"getPing", gsc_player_getping, 0},
     {"getFPS", gsc_player_getfps, 0},
     {"getUserinfo", gsc_player_getuserinfo, 0},
