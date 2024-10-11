@@ -62,6 +62,11 @@ scr_function_t scriptFunctions[] =
     {"webhookMessage", gsc_curl_webhookmessage, 0}, // From Kazam pull request #8
 #endif
 
+
+#if COMPILE_CURL == 1
+    {"getCountry", gsc_getcountry, 0}, 
+#endif
+
 #if COMPILE_SSL == 1
     {"hash", gsc_utils_hash, 0},
 #endif
@@ -107,7 +112,7 @@ scr_method_t scriptMethods[] =
     {"leanRightButtonPressed", gsc_player_button_leanright, 0},
     {"reloadButtonPressed", gsc_player_button_reload, 0},
 
-    {"getCountry", gsc_player_getcountry, 0},
+    //{"getCountry", gsc_player_getcountry, 0},
 
     {"getIP", gsc_player_getip, 0},
     {"getPing", gsc_player_getping, 0},

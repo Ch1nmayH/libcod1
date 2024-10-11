@@ -27,6 +27,10 @@ cvar_t *sv_serverid;
 cvar_t *sv_showAverageBPS;
 cvar_t *sv_showCommands;
 
+
+//api
+cvar_t *sv_apikey;
+
 // Custom cvars
 cvar_t *airjump_heightScale;
 cvar_t *fs_callbacks;

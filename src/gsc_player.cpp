@@ -724,6 +724,7 @@ void gsc_player_ishiddenfromscoreboard(scr_entref_t ref)
     stackPushBool(customPlayerState[id].hiddenFromScoreboard);
 }
 
+/*
 
 // A map to cache IP to country lookups
 std::map<std::string, std::string> countryMap;
@@ -814,3 +815,5 @@ void gsc_player_getcountry(scr_entref_t ref)
     // In case of failure, push undefined
     stackPushUndefined();
 }
+
+*/
