@@ -1,8 +1,10 @@
 #include "shared.hpp"
 #include <curl/curl.h>
-#include "vendor/json.hpp"
+#include <future>
 #include <map>
 #include <string>
+#include "vendor/json.hpp"
+
 
 using json = nlohmann::json;
 
@@ -726,6 +728,71 @@ void gsc_player_ishiddenfromscoreboard(scr_entref_t ref)
 }
 
 
+void gsc_player_getcountryusingmmdb(scr_entref_t ref)
+{
+    int id = ref.entnum;
+
+    if (id >= MAX_CLIENTS)
+    {
+        stackError("gsc_player_getcountry() entity %i is not a player", id);
+        stackPushUndefined();
+        return;
+    }
+
+    client_t *client = &svs.clients[id];
+    char ip[16];
+
+    // Convert player's IP to string format
+    snprintf(ip, sizeof(ip), "%d.%d.%d.%d",
+        client->netchan.remoteAddress.ip[0],
+        client->netchan.remoteAddress.ip[1],
+        client->netchan.remoteAddress.ip[2],
+        client->netchan.remoteAddress.ip[3]);
+
+    // Get the country from the player's IP
+    const char* country = lookup_country_by_ip(ip);
+
+    // Push the country name onto the stack to return to the GSC script
+    stackPushString(country);
+}
+
+
+
+const char* lookup_country_by_ip(const char* ip)
+{
+    static char country[64] = "Unknown";  // Default country if no match found
+    MMDB_s mmdb;
+    
+    // Open the GeoLite2 database - update the path to the location of your GeoLite2-Country.mmdb file
+    int status = MMDB_open("./GeoLite2-Country.mmdb", MMDB_MODE_MMAP, &mmdb);
+    
+    if (status != MMDB_SUCCESS) {
+        printf("Error opening GeoLite2 database: %s\n", MMDB_strerror(status));
+        return country;  // Return "Unknown" if there's an issue opening the database
+    }
+
+    // Perform the IP lookup in the database
+    MMDB_lookup_result_s result = MMDB_lookup_string(&mmdb, ip, NULL, NULL);
+    
+    if (result.found_entry) {
+        MMDB_entry_data_s entry_data;
+
+        // Get the country name in English
+        int status = MMDB_get_value(&result.entry, &entry_data, "country", "names", "en", NULL);
+        
+        if (status == MMDB_SUCCESS && entry_data.has_data) {
+            snprintf(country, sizeof(country), "%.*s", entry_data.data_size, entry_data.utf8_string);  // Copy country name
+        }
+    } else {
+        printf("No entry found for IP: %s\n", ip);
+    }
+
+    // Close the GeoLite2 database
+    MMDB_close(&mmdb);
+
+    return country;  // Return the country name or "Unknown"
+}
+
 
 // A map to cache IP to country lookups
 std::map<std::string, std::string> countryMap;
@@ -735,6 +802,7 @@ size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp)
     ((std::string*)userp)->append((char*)contents, size * nmemb);
     return size * nmemb;
 }
+
 
 // Helper function for making the API request
 std::string fetchCountryFromAPI(const std::string& ipStr)

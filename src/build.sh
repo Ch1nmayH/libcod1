@@ -5,7 +5,6 @@
 cc="g++"
 options="-I. -m32 -fPIC -Wall -fvisibility=hidden"
 
-
 separator="-------------------------"
 list_item=" - "
 wait_indicator="..."
@@ -87,6 +86,28 @@ else
     echo "OFF"
     constants+=" -D COMPILE_SQLITE=0"
 fi
+
+
+maxminddb_found=0
+maxminddb_link=""
+maxminddb_libpath="/usr/lib/i386-linux-gnu/libmaxminddb.so"
+echo -n "$list_item"
+echo -n "MaxMind DB: "
+if [ -v mmdb ]; then
+    if [ -e "$maxminddb_libpath" ]; then
+        maxminddb_found=1
+        maxminddb_link="-lmaxminddb"
+        constants+=" -D COMPILE_MAXMINDDB=1"
+        echo "ON"
+    else
+        echo "requested but lib not found, aborting."
+        exit 1
+    fi
+else
+    echo "OFF"
+    constants+=" -D COMPILE_MAXMINDDB=0"
+fi
+
 
 curl_found=0
 curl_link=""
@@ -197,7 +218,7 @@ fi
 echo -n "Linking libcod1.so"
 echo $wait_indicator
 objects="$(ls objects/*.opp)"
-$cc -m32 -shared -L/lib32 -o ../bin/libcod1.so -ldl $objects -lpthread $sqlite_link $curl_link $ssl_link
+$cc -m32 -shared -L/lib32 -L/usr/lib/i386-linux-gnu -o ../bin/libcod1.so -ldl $objects -lpthread $sqlite_link $curl_link $ssl_link -lmaxminddb
 
 
 
