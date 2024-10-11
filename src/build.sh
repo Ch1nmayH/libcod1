@@ -193,13 +193,6 @@ if [ $curl_found == 1 ]; then
     $cc $debug $options $constants -c gsc_curl.cpp -o objects/gsc_curl.opp
 fi
 
-if [ $curl_found == 1 ]; then
-    echo -n "$list_item"
-    echo -n "gsc_getcountry.cpp"
-    echo $wait_indicator
-    $cc $debug $options $constants -c gsc_getcountry.cpp -o objects/gsc_getcountry.opp
-fi
-
 echo -n "Linking libcod1.so"
 echo $wait_indicator
 objects="$(ls objects/*.opp)"

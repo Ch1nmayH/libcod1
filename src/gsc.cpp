@@ -62,11 +62,6 @@ scr_function_t scriptFunctions[] =
     {"webhookMessage", gsc_curl_webhookmessage, 0}, // From Kazam pull request #8
 #endif
 
-
-#if COMPILE_CURL == 1
-    {"getCountry", gsc_getcountry, 0}, 
-#endif
-
 #if COMPILE_SSL == 1
     {"hash", gsc_utils_hash, 0},
 #endif
