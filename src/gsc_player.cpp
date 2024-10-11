@@ -1,7 +1,8 @@
 #include "shared.hpp"
 #include <curl/curl.h>
 #include "vendor/json.hpp"
-
+#include <map>
+#include <string>
 
 using json = nlohmann::json;
 
@@ -735,6 +736,53 @@ size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp)
     return size * nmemb;
 }
 
+// Helper function for making the API request
+std::string fetchCountryFromAPI(const std::string& ipStr)
+{
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string response_string;
+
+    if (curl)
+    {
+        std::string provider = "https://api.iplocation.net/?&ip="; // Geolocation API
+        std::string url = provider + ipStr;
+
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
+        res = curl_easy_perform(curl);
+        curl_easy_cleanup(curl);
+
+        if (res == CURLE_OK)
+        {
+            try
+            {
+                // Parse the JSON response
+                nlohmann::json j = nlohmann::json::parse(response_string);
+                if (j.contains("country_name") && j["country_name"].is_string())
+                {
+                    return j["country_name"];
+                }
+            }
+            catch (const std::exception& e)
+            {
+                stackError("gsc_player_getcountry() failed to parse JSON: %s", e.what());
+            }
+        }
+        else
+        {
+            stackError("gsc_player_getcountry() curl_easy_perform() failed: %s", curl_easy_strerror(res));
+        }
+    }
+    else
+    {
+        stackError("gsc_player_getcountry() failed to initialize curl");
+    }
+    return "";  // In case of failure, return empty string
+}
+
+// The asynchronous function
 void gsc_player_getcountry(scr_entref_t ref)
 {
     int id = ref.entnum;
@@ -764,55 +812,23 @@ void gsc_player_getcountry(scr_entref_t ref)
         return;
     }
 
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    if (curl)
-    {
-        std::string provider = "https://api.iplocation.net/?&ip="; // Geolocation API
-        std::string url = provider + ipStr;
-        std::string response_string;
+    // Asynchronous task to fetch country and push result
+    std::future<void> result = std::async(std::launch::async, [ipStr]() {
+        std::string country = fetchCountryFromAPI(ipStr);
 
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
-        res = curl_easy_perform(curl);
-        curl_easy_cleanup(curl);
-
-        if (res == CURLE_OK)
+        if (!country.empty())
         {
-            try
-            {
-                // Parse the JSON response
-                nlohmann::json j = nlohmann::json::parse(response_string);
+            countryMap[ipStr] = country;  // Cache the country
 
-                if (j.contains("country_name") && j["country_name"].is_string())
-                {
-                    std::string country = j["country_name"];
-                    countryMap[ipStr] = country;  // Cache the country
-
-                    // Push the country onto the stack
-                    stackPushString(country.c_str());
-                    return;
-                }
-            }
-            catch (const std::exception& e)
-            {
-                stackError("gsc_player_getcountry() failed to parse JSON: %s", e.what());
-                stackPushUndefined();
-                return;
-            }
+            // Push the result to the game engine stack (Note: may need thread-safe access)
+            stackPushString(country.c_str());
         }
         else
         {
-            stackError("gsc_player_getcountry() curl_easy_perform() failed: %s", curl_easy_strerror(res));
+            // In case of failure, push undefined
+            stackPushUndefined();
         }
-    }
-    else
-    {
-        stackError("gsc_player_getcountry() failed to initialize curl");
-    }
+    });
 
-    // In case of failure, push undefined
-    stackPushUndefined();
+    // Allow the game to continue running while the async call processes.
 }
-

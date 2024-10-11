@@ -5,6 +5,7 @@
 cc="g++"
 options="-I. -m32 -fPIC -Wall -fvisibility=hidden"
 
+
 separator="-------------------------"
 list_item=" - "
 wait_indicator="..."
