@@ -6,8 +6,11 @@
 #include <maxminddb.h>
 #include <cstdio>
 #include <iostream>
+#include <mutex>
+#include <unordered_map>
 #include "vendor/json.hpp"
-
+#include "thread"
+#include <pthread.h>
 
 using json = nlohmann::json;
 
@@ -731,13 +734,13 @@ void gsc_player_ishiddenfromscoreboard(scr_entref_t ref)
 }
 
 
+// Function to get the player's country using MaxMind DB
 void gsc_player_getcountryusingmmdb(scr_entref_t ref)
 {
     int id = ref.entnum;
 
-    if (id >= MAX_CLIENTS)
-    {
-        stackError("gsc_player_getcountry() entity %i is not a player", id);
+    if (id >= MAX_CLIENTS) {
+        stackError("gsc_player_getcountryusingmmdb() entity %i is not a player", id);
         stackPushUndefined();
         return;
     }
@@ -759,15 +762,15 @@ void gsc_player_getcountryusingmmdb(scr_entref_t ref)
     stackPushString(country);
 }
 
-
-
+// Function to look up the country by IP using MaxMindDB
 const char* lookup_country_by_ip(const char* ip)
 {
     static char country[64] = "Unknown";  // Default country if no match found
     MMDB_s mmdb;
-    
-    // Open the GeoLite2 database - update the path to the location of your GeoLite2-Country.mmdb file
-    int status = MMDB_open("./GeoLite2-Country.mmdb", MMDB_MODE_MMAP, &mmdb);
+    int gai_error, mmdb_error;
+
+    // Open the GeoLite2 database - update the path as needed
+    int status = MMDB_open("/opt/cod1/myserver2/GeoLite2-Country.mmdb", MMDB_MODE_MMAP, &mmdb);
     
     if (status != MMDB_SUCCESS) {
         printf("Error opening GeoLite2 database: %s\n", MMDB_strerror(status));
@@ -775,9 +778,13 @@ const char* lookup_country_by_ip(const char* ip)
     }
 
     // Perform the IP lookup in the database
-    MMDB_lookup_result_s result = MMDB_lookup_string(&mmdb, ip, NULL, NULL);
-    
-    if (result.found_entry) {
+    MMDB_lookup_result_s result = MMDB_lookup_string(&mmdb, ip, &gai_error, &mmdb_error);
+
+    if (gai_error != 0) {
+        printf("Error from getaddrinfo for IP %s: %s\n", ip, gai_strerror(gai_error));
+    } else if (mmdb_error != MMDB_SUCCESS) {
+        printf("Error from MaxMind DB lookup: %s\n", MMDB_strerror(mmdb_error));
+    } else if (result.found_entry) {
         MMDB_entry_data_s entry_data;
 
         // Get the country name in English
@@ -785,6 +792,8 @@ const char* lookup_country_by_ip(const char* ip)
         
         if (status == MMDB_SUCCESS && entry_data.has_data) {
             snprintf(country, sizeof(country), "%.*s", entry_data.data_size, entry_data.utf8_string);  // Copy country name
+        } else {
+            printf("Failed to retrieve country name for IP %s\n", ip);
         }
     } else {
         printf("No entry found for IP: %s\n", ip);
@@ -795,7 +804,6 @@ const char* lookup_country_by_ip(const char* ip)
 
     return country;  // Return the country name or "Unknown"
 }
-
 
 // A map to cache IP to country lookups
 std::map<std::string, std::string> countryMap;
@@ -905,105 +913,4 @@ void gsc_player_getcountry(scr_entref_t ref)
     // Allow the game to continue running while the async call processes.
 }
 
-// Function to fetch country from MaxMind GeoIP database (this will be called asynchronously)
-std::string fetchCountryFromMMDB(const std::string& ipStr)
-{
-    // Path to the GeoLite2 database
-    const char *dbPath = "./GeoLite2-Country.mmdb";
-    MMDB_s mmdb;
 
-    int status = MMDB_open(dbPath, MMDB_MODE_MMAP, &mmdb);
-    if (status != MMDB_SUCCESS)
-    {
-        std::cerr << "Can't open MaxMind database: " << MMDB_strerror(status) << std::endl;
-        return "";
-    }
-
-    int gai_error, mmdb_error;
-    MMDB_lookup_result_s result = MMDB_lookup_string(&mmdb, ipStr.c_str(), &gai_error, &mmdb_error);
-
-    if (gai_error != 0)
-    {
-        std::cerr << "Error from getaddrinfo for " << ipStr << ": " << gai_strerror(gai_error) << std::endl;
-        MMDB_close(&mmdb);
-        return "";
-    }
-
-    if (mmdb_error != MMDB_SUCCESS)
-    {
-        std::cerr << "Error from MaxMind DB lookup: " << MMDB_strerror(mmdb_error) << std::endl;
-        MMDB_close(&mmdb);
-        return "";
-    }
-
-    if (result.found_entry)
-    {
-        MMDB_entry_data_s entry_data;
-
-        // Lookup the country name in the database result
-        int status = MMDB_get_value(&result.entry, &entry_data, "country", "names", "en", NULL);
-
-        if (status == MMDB_SUCCESS && entry_data.has_data && entry_data.type == MMDB_DATA_TYPE_UTF8_STRING)
-        {
-            std::string country(entry_data.utf8_string, entry_data.data_size);
-            MMDB_close(&mmdb);
-            return country;
-        }
-        else
-        {
-            std::cerr << "No country data for IP " << ipStr << std::endl;
-        }
-    }
-
-    MMDB_close(&mmdb);
-    return "";  // If the lookup fails, return an empty string
-}
-
-// Main function to get player's country from MMDB asynchronously
-void gsc_player_getcountryfrommmdb(scr_entref_t ref)
-{
-    int id = ref.entnum;
-
-    if (id >= MAX_CLIENTS)
-    {
-        stackError("gsc_player_getcountryfrommmdb() entity %i is not a player", id);
-        stackPushUndefined();
-        return;
-    }
-
-    client_t *client = &svs.clients[id];
-    char ip[16];
-
-    snprintf(ip, sizeof(ip), "%d.%d.%d.%d",
-        client->netchan.remoteAddress.ip[0],
-        client->netchan.remoteAddress.ip[1],
-        client->netchan.remoteAddress.ip[2],
-        client->netchan.remoteAddress.ip[3]);
-
-    std::string ipStr(ip);
-
-    // Check if IP is already cached
-    if (countryMap.find(ipStr) != countryMap.end())
-    {
-        stackPushString(countryMap[ipStr].c_str());
-        return;
-    }
-
-    // Asynchronously fetch country from MaxMind DB
-    auto fetchCountryFuture = std::async(std::launch::async, fetchCountryFromMMDB, ipStr);
-
-    // Detach the async task and continue execution (non-blocking)
-    fetchCountryFuture.then([&](std::future<std::string> countryFuture) {
-        std::string country = countryFuture.get();
-
-        if (!country.empty())
-        {
-            countryMap[ipStr] = country;  // Cache the country for future lookups
-            stackPushString(country.c_str());
-        }
-        else
-        {
-            stackPushUndefined();  // In case of failure
-        }
-    });
-}
