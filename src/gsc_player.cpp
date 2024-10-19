@@ -770,7 +770,7 @@ const char* lookup_country_by_ip(const char* ip)
     int gai_error, mmdb_error;
 
     // Open the GeoLite2 database - update the path as needed
-    int status = MMDB_open("/opt/cod1/myserver2/GeoLite2-Country.mmdb", MMDB_MODE_MMAP, &mmdb);
+    int status = MMDB_open("/usr/bin/GeoLite2-Country.mmdb", MMDB_MODE_MMAP, &mmdb);
     
     if (status != MMDB_SUCCESS) {
         printf("Error opening GeoLite2 database: %s\n", MMDB_strerror(status));
@@ -805,112 +805,7 @@ const char* lookup_country_by_ip(const char* ip)
     return country;  // Return the country name or "Unknown"
 }
 
-// A map to cache IP to country lookups
-std::map<std::string, std::string> countryMap;
 
 
-size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp)
-{
-    ((std::string*)userp)->append((char*)contents, size * nmemb);
-    return size * nmemb;
-}
-
-
-// Helper function for making the API request
-std::string fetchCountryFromAPI(const std::string& ipStr)
-{
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    std::string response_string;
-
-    if (curl)
-    {
-        std::string provider = "https://api.iplocation.net/?&ip="; // Geolocation API
-        std::string url = provider + ipStr;
-
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
-        res = curl_easy_perform(curl);
-        curl_easy_cleanup(curl);
-
-        if (res == CURLE_OK)
-        {
-            try
-            {
-                // Parse the JSON response
-                nlohmann::json j = nlohmann::json::parse(response_string);
-                if (j.contains("country_name") && j["country_name"].is_string())
-                {
-                    return j["country_name"];
-                }
-            }
-            catch (const std::exception& e)
-            {
-                stackError("gsc_player_getcountry() failed to parse JSON: %s", e.what());
-            }
-        }
-        else
-        {
-            stackError("gsc_player_getcountry() curl_easy_perform() failed: %s", curl_easy_strerror(res));
-        }
-    }
-    else
-    {
-        stackError("gsc_player_getcountry() failed to initialize curl");
-    }
-    return "";  // In case of failure, return empty string
-}
-
-// The asynchronous function
-void gsc_player_getcountry(scr_entref_t ref)
-{
-    int id = ref.entnum;
-
-    if (id >= MAX_CLIENTS)
-    {
-        stackError("gsc_player_getcountry() entity %i is not a player", id);
-        stackPushUndefined();
-        return;
-    }
-
-    client_t *client = &svs.clients[id];
-    char ip[16];
-
-    snprintf(ip, sizeof(ip), "%d.%d.%d.%d",
-        client->netchan.remoteAddress.ip[0],
-        client->netchan.remoteAddress.ip[1],
-        client->netchan.remoteAddress.ip[2],
-        client->netchan.remoteAddress.ip[3]);
-
-    std::string ipStr(ip);
-
-    // Check if IP is already cached in countryMap
-    if (countryMap.find(ipStr) != countryMap.end())
-    {
-        stackPushString(countryMap[ipStr].c_str());
-        return;
-    }
-
-    // Asynchronous task to fetch country and push result
-    std::future<void> result = std::async(std::launch::async, [ipStr]() {
-        std::string country = fetchCountryFromAPI(ipStr);
-
-        if (!country.empty())
-        {
-            countryMap[ipStr] = country;  // Cache the country
-
-            // Push the result to the game engine stack (Note: may need thread-safe access)
-            stackPushString(country.c_str());
-        }
-        else
-        {
-            // In case of failure, push undefined
-            stackPushUndefined();
-        }
-    });
-
-    // Allow the game to continue running while the async call processes.
-}
 
 
