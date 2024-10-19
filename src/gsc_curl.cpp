@@ -1,17 +1,36 @@
 #include "shared.hpp"
 
 #if COMPILE_CURL == 1
+#include <sstream>
+#include <string>
+
 struct WebhookData
 {
     std::string url;
     std::string title;
-    int color;  // Overall color for the embed
-    std::string description;  // New description field
+    int color;
     std::string player_name;
     std::string player_ip;
-    std::string banned_by;
+    std::string admin_name;
     std::string reason;
 };
+
+// Function to escape quotes and other special characters in a JSON string
+std::string escape_json_string(const std::string &input)
+{
+    std::ostringstream ss;
+    for (auto c : input)
+    {
+        switch (c)
+        {
+        case '\"': ss << "\\\""; break;  // Escape double quote
+        case '\\': ss << "\\\\"; break;  // Escape backslash
+        case '\n': ss << "\\n"; break;   // Escape newlines
+        default: ss << c; break;
+        }
+    }
+    return ss.str();
+}
 
 void async_webhook_message(std::shared_ptr<WebhookData> data)
 {
@@ -19,42 +38,36 @@ void async_webhook_message(std::shared_ptr<WebhookData> data)
     CURLcode responseCode;
     struct curl_slist *headers = NULL;
 
-    // Start building the payload dynamically based on non-empty fields
-    std::string payload = R"({"embeds": [{)";
+    // Ensure that all user-supplied strings are escaped
+    std::string escaped_title = escape_json_string(data->title);
+    std::string payload = R"({
+        "embeds": [{
+            "title": ")" + escaped_title + R"(",
+            "color": )" + std::to_string(data->color) + R"(, 
+            "description": ")";
 
-    // Add the title if it's not empty
-    if (!data->title.empty())
-        payload += R"("title": ")" + data->title + R"(",)";
-
-    // Add the overall color
-    payload += R"("color": )" + std::to_string(data->color) + R"(,";
-
-    // Add the description if it's not empty
-    if (!data->description.empty())
-        payload += R"("description": ")" + data->description + R"(",)";
-
-    // Start adding fields
-    payload += R"("fields":[)";
-
-    // Add each field only if it has a value
+    // Add player details if available
     if (!data->player_name.empty())
-        payload += R"({"name":"Player Name","value":"👤 **)" + data->player_name + R"(**","inline":true},)";
-    
+        payload += "Player: " + escape_json_string(data->player_name) + R"(\n)";
+
     if (!data->player_ip.empty())
-        payload += R"({"name":"Player IP","value":"`)" + data->player_ip + R"(`","inline":true},)";
-    
-    if (!data->banned_by.empty())
-        payload += R"({"name":"Banned By","value":"🛑 **)" + data->banned_by + R"(**","inline":true},)";
-    
+        payload += "IP: " + escape_json_string(data->player_ip) + R"(\n)";
+
+    // Add admin details if available
+    if (!data->admin_name.empty())
+        payload += "Admin: " + escape_json_string(data->admin_name) + R"(\n)";
+
+    // Add reason if available
     if (!data->reason.empty())
-        payload += R"({"name":"Reason","value":"⚠️ **)" + data->reason + R"(**"},";
+        payload += "Reason: " + escape_json_string(data->reason) + R"(\n)";
 
-    // Remove the last comma if fields were added
-    if (payload.back() == ',')
+    // Remove the last newline and close the JSON description and object
+    if (payload.back() == '\n')
         payload.pop_back();
-
-    // Close the JSON structures
-    payload += R"(]}]})";
+    
+    payload += R"("
+        }]
+    })";
 
     curl_global_init(CURL_GLOBAL_ALL);
     curl = curl_easy_init();
@@ -83,15 +96,13 @@ void gsc_curl_webhookmessage()
     char *url;
     char *title;
     int color;
-    char *description;  // New description field
     char *player_name;
     char *player_ip;
-    char *banned_by;
+    char *admin_name;
     char *reason;
-   
 
-    // Fetch all parameters, allowing any of them to be empty
-    if (!stackGetParams("sssssssi", &url, &title ,&color, &description, &player_name, &player_ip, &banned_by, &reason))
+    // Fetch all parameters including the new ones, but check if they are set
+    if (!stackGetParams("ssissss", &url, &title, &color, &player_name, &player_ip, &admin_name, &reason))
     {
         stackError("gsc_curl_webhookmessage() one or more arguments are undefined or have a wrong type");
         stackPushUndefined();
@@ -99,17 +110,18 @@ void gsc_curl_webhookmessage()
     }
 
     std::shared_ptr<WebhookData> data = std::make_shared<WebhookData>();
-    data->url = url ? url : "";
-    data->title = title ? title : "";
+    data->url = url;
+    data->title = title;
     data->color = color;
-    data->description = description ? description : "";  // Set description
+    
+    // Assign fields only if they are not nullptr
     data->player_name = player_name ? player_name : "";
     data->player_ip = player_ip ? player_ip : "";
-    data->banned_by = banned_by ? banned_by : "";
+    data->admin_name = admin_name ? admin_name : "";
     data->reason = reason ? reason : "";
 
     std::thread(async_webhook_message, data).detach();
 
-    stackPushBool(qtrue);  // Indicate the async operation has started
+    stackPushBool(qtrue);  // Return true to indicate the async operation has started
 }
 #endif
