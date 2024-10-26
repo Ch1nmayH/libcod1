@@ -734,7 +734,7 @@ void gsc_player_ishiddenfromscoreboard(scr_entref_t ref)
 }
 
 
-// Function to get the player's country using MaxMind DB
+// Function to get the player's country and state using MaxMind DB
 void gsc_player_getcountryusingmmdb(scr_entref_t ref)
 {
     int id = ref.entnum;
@@ -755,26 +755,29 @@ void gsc_player_getcountryusingmmdb(scr_entref_t ref)
         client->netchan.remoteAddress.ip[2],
         client->netchan.remoteAddress.ip[3]);
 
-    // Get the country from the player's IP
-    const char* country = lookup_country_by_ip(ip);
+    // Get the location (country, state) from the player's IP
+    const char* location = lookup_country_by_ip(ip);
 
-    // Push the country name onto the stack to return to the GSC script
-    stackPushString(country);
+    // Push the location (country, state) onto the stack to return to the GSC script
+    stackPushString(location);
 }
 
-// Function to look up the country by IP using MaxMindDB
+// Function to look up the country and state by IP using MaxMindDB
 const char* lookup_country_by_ip(const char* ip)
 {
-    static char country[64] = "Unknown";  // Default country if no match found
+    char location[256] = "";  // Local buffer for location string
+    char country[64] = "Unknown";    // Default country if no match found
+    char state[64] = "Unknown";      // Default state if no match found
+
     MMDB_s mmdb;
     int gai_error, mmdb_error;
 
-    // Open the GeoLite2 database - update the path as needed
-    int status = MMDB_open("/usr/bin/GeoLite2-Country.mmdb", MMDB_MODE_MMAP, &mmdb);
-    
+    // Open the GeoLite2 City database - update the path as needed
+    int status = MMDB_open("/usr/bin/GeoLite2-City.mmdb", MMDB_MODE_MMAP, &mmdb);
+
     if (status != MMDB_SUCCESS) {
         printf("Error opening GeoLite2 database: %s\n", MMDB_strerror(status));
-        return country;  // Return "Unknown" if there's an issue opening the database
+        return "Error opening GeoLite2 database";
     }
 
     // Perform the IP lookup in the database
@@ -789,11 +792,14 @@ const char* lookup_country_by_ip(const char* ip)
 
         // Get the country name in English
         int status = MMDB_get_value(&result.entry, &entry_data, "country", "names", "en", NULL);
-        
         if (status == MMDB_SUCCESS && entry_data.has_data) {
-            snprintf(country, sizeof(country), "%.*s", entry_data.data_size, entry_data.utf8_string);  // Copy country name
-        } else {
-            printf("Failed to retrieve country name for IP %s\n", ip);
+            snprintf(country, sizeof(country), "%.*s", entry_data.data_size, entry_data.utf8_string);
+        }
+
+        // Get the state name in English (if applicable)
+        status = MMDB_get_value(&result.entry, &entry_data, "subdivisions", "0", "names", "en", NULL);
+        if (status == MMDB_SUCCESS && entry_data.has_data) {
+            snprintf(state, sizeof(state), "%.*s", entry_data.data_size, entry_data.utf8_string);
         }
     } else {
         printf("No entry found for IP: %s\n", ip);
@@ -802,10 +808,24 @@ const char* lookup_country_by_ip(const char* ip)
     // Close the GeoLite2 database
     MMDB_close(&mmdb);
 
-    return country;  // Return the country name or "Unknown"
+    // Format the location string, only including non-"Unknown" fields
+    location[0] = '\0';  // Reset location buffer
+
+    if (strcmp(state, "Unknown") != 0) {
+        strncat(location, state, sizeof(location) - strlen(location) - 1);
+    }
+
+    if (strcmp(country, "Unknown") != 0) {
+        if (strlen(location) > 0) {
+            strncat(location, ", ", sizeof(location) - strlen(location) - 1);
+        }
+        strncat(location, country, sizeof(location) - strlen(location) - 1);
+    }
+
+    // If both fields are "Unknown", set location to "Unknown"
+    if (strlen(location) == 0) {
+        snprintf(location, sizeof(location), "Unknown");
+    }
+
+    return strdup(location);  // Return a copy of the location string
 }
-
-
-
-
-
