@@ -4,6 +4,8 @@ static const VM_Call_t VM_Call = (VM_Call_t)0x08092158;
 typedef char* (*va_t)(const char *format, ...);
 extern va_t va;
 
+typedef void (*G_Error_t)(const char *fmt, ...);
+
 typedef void (*Cbuf_ExecuteText_t)(cbufExec_t exec_when, const char* text);
 static const Cbuf_ExecuteText_t Cbuf_ExecuteText = (Cbuf_ExecuteText_t)0x0805a8a0;
 
@@ -232,6 +234,12 @@ static const MSG_WriteBigString_t MSG_WriteBigString = (MSG_WriteBigString_t)0x0
 
 typedef void (*MSG_WriteDeltaEntity_t)(msg_t *msg, entityState_t *from, entityState_t *to, qboolean force);
 static const MSG_WriteDeltaEntity_t MSG_WriteDeltaEntity = (MSG_WriteDeltaEntity_t)0x0807f698;
+
+typedef void (*MSG_WriteDeltaField_t)(msg_t *msg, const byte *from, const byte *to, const netField_t *field);
+static const MSG_WriteDeltaField_t MSG_WriteDeltaField = (MSG_WriteDeltaField_t)0x0807c0e0;
+
+typedef void (*MSG_WriteDeltaHudElems_t)(msg_t *msg, hudelem_t *from, hudelem_t *to, int count);
+static const MSG_WriteDeltaHudElems_t MSG_WriteDeltaHudElems = (MSG_WriteDeltaHudElems_t)0x0807cd78;
 ////
 
 //// NET
@@ -506,4 +514,6 @@ typedef void (*trap_GetUserinfo_t)(int num, char *buffer, int bufferSize);
 
 typedef void (*trap_SetConfigstring_t)(int index, const char *val);
 extern trap_SetConfigstring_t trap_SetConfigstring;
+
+typedef int (*trap_GetArchivedPlayerState_t)(int clientNum, int *pArchiveTime, playerState_t *ps);
 ////

@@ -3,7 +3,7 @@
 #define qfalse  0
 
 // 3D vectors
-#define VectorCopy(a, b)        ((b)[0] = (a)[0],(b)[1] = (a)[1],(b)[2] = (a)[2])
+#define VectorCopy(a, b)        ((b)[0] = (a)[0], (b)[1] = (a)[1], (b)[2] = (a)[2])
 #define VectorScale(v, s, o)    ((o)[0] = (v)[0] * (s),(o)[1] = (v)[1] * (s),(o)[2] = (v)[2] * (s))
 
 #define BIG_INFO_STRING 0x2000
@@ -39,6 +39,11 @@
 #define MAX_RELIABLE_COMMANDS       64
 #define MAX_STRINGLENGTH            1024
 #define MAX_MASTER_SERVERS          5
+#define MAX_WEAPONS                 64
+#define MAX_OBJECTIVES              16
+#define MAX_HUDELEMENTS             31
+#define MAX_HUDELEMS_ARCHIVAL       MAX_HUDELEMENTS
+#define MAX_HUDELEMS_CURRENT        MAX_HUDELEMENTS
 
 #define CVAR_NOFLAG             0               // 0
 #define CVAR_ARCHIVE            (1 << 0)        // 1
@@ -538,6 +543,27 @@ typedef struct
     huff_t decompressor;
 } huffman_t;
 
+typedef struct netField_s
+{
+    char *name;
+    int offset;
+    int bits;
+} netField_t;
+
+typedef struct trace_s
+{
+    float fraction;     // 0x0
+    vec3_t endpos;      // 0x4
+    vec3_t normal;      // 0x10
+    int surfaceFlags;   // 0x1C
+    byte gap0x20[8];
+    uint16_t entityNum; // 0x28
+    uint16_t partName;  // 0x2A
+    byte gap0x2C[2];
+    byte allsolid;      // 0x2E
+    byte startsolid;    // 0x2F
+} trace_t;
+
 typedef struct usercmd_s
 {
     int serverTime;
@@ -688,6 +714,26 @@ typedef struct
     int eventTime;
 } entityShared_t;
 
+typedef struct objective_s
+{
+    int state;
+    vec3_t origin;
+    int entNum;
+    int teamNum;
+    int icon;
+} objective_t;
+
+typedef struct hudelem_s
+{
+    byte gap[112];
+} hudelem_t;
+
+typedef struct hudElemState_s
+{
+    hudelem_t current[31];
+    hudelem_t archival[31];
+} hudElemState_t;
+
 typedef enum
 {
     PM_NORMAL = 0x0,
@@ -726,9 +772,10 @@ typedef struct playerState_s
     int pm_time;            // 0x10
     vec3_t origin;          // [0] = 0x14, [1] = 0x18, [2] = 0x1C
     vec3_t velocity;        // [0] = 0x20, [1] = 0x24, [2] = 0x28
-    vec2_t oldVelocity;     // [0] = 0x2C, [1] = 0x30
-    int weaponTime;         // 0x34
-    int weaponDelay;        // 0x38
+    int weaponTime;         // 0x2c
+    int weaponDelay;        // 0x30
+    int grenadeTimeLeft;    // 0x34
+    int iFoliageSoundTime;  // 0x38
     int gravity;            // 0x3C
     float leanf;            // 0x40
     int speed;              // 0x44
@@ -736,7 +783,7 @@ typedef struct playerState_s
     int groundEntityNum;    // 0x54
     vec3_t vLadderVec;      // [0] = 0x58, [1] = 0x5C, [2] = 0x60
     int jumpTime;           // 0x64
-    float jumpOriginZ;      // 0x68
+    float fJumpOriginZ;      // 0x68
     int legsTimer;          // 0x6C
     int legsAnim;           // 0x70
     int torsoTimer;         // 0x74
@@ -744,18 +791,69 @@ typedef struct playerState_s
     int movementDir;        // 0x7C
     int eFlags;             // 0x80
     int eventSequence;      // 0x84
-    int events[4];
-    unsigned int eventParms[4];
-    int oldEventSequence;
-    int clientNum;
-    unsigned int weapon;
-    weaponstate_t weaponstate;
-    float fWeaponPosFrac;
-    int viewmodelIndex;
-    vec3_t viewangles;
-    int viewHeightTarget;
-    float viewHeightCurrent;
-    byte gap[8188];
+    int events[4];          // 0x88
+    unsigned int eventParms[4]; // 0x98
+    int oldEventSequence;       // 0xA8
+    int clientNum;              // 0xAC
+    unsigned int weapon;        // 0xB0
+    weaponstate_t weaponstate;  // 0xB4
+    float fWeaponPosFrac;       // 0xB8
+    int viewmodelIndex;         // 0xBC
+    vec3_t viewangles;          // 0xC0
+    int viewHeightTarget;       // 0xCC
+    float viewHeightCurrent;    // 0xD0
+    int viewHeightLerpTime;     // 0xD4
+    int viewHeightLerpTarget;   // 0xD8
+    int viewHeightLerpDown;     // 0xDC
+    int viewHeightLerpPosAdj;   // 0xE0
+    int damageEvent;            // 0xe4
+    int damageYaw;              // 0xe8
+    int damagePitch;            // 0xec
+    int damageCount;            // 0xf0
+    int stats[6];               // 0xf4
+    int ammo[MAX_WEAPONS];      // 0x10c
+    int ammoclip[MAX_WEAPONS];  // 0x20c
+    unsigned int weapons[2];    // 0x30c
+    byte weaponslots[8];        // 0x314
+    unsigned int weaponrechamber[2]; // 0x31c
+    vec3_t mins;                // 0x324
+    vec3_t maxs;                // 0x330
+    int proneViewHeight;        // 0x33C
+    int crouchViewHeight;       // 0x340
+    int standViewHeight;        // 0x344
+    int deadViewHeight;         // 0x348
+    float walkSpeedScale;       // 0x34C // ADS
+    float runSpeedScale;        // 0x350
+    float proneSpeedScale;      // 0x354
+    float crouchSpeedScale;     // 0x358
+    float strafeSpeedScale;     // 0x35C
+    float backSpeedScale;       // 0x360
+    byte gap_0x364[4];
+    float proneDirection;       // 0x368
+    float proneDirectionPitch;  // 0x36c
+    float proneTorsoPitch;      // 0x370
+    int viewlocked;             // 0x374
+    int viewlocked_entNum;      // 0x378
+    float friction;             // 0x37C
+    int gunfx;                  // 0x380
+    int serverCursorHint;       // 0x384
+    int serverCursorHintVal;    // 0x388
+    trace_t serverCursorHintTrace; // 0x38C
+    byte gap_0x3BC[4];
+    int iCompassFriendInfo;     // 0x3C0
+    float fTorsoHeight;         // 0x3c4
+    float fTorsoPitch;          // 0x3c8
+    float fWaistPitch;          // 0x3cc
+    int entityEventSequence;    // 0x3D0
+    int weapAnim;               // 0x3d4
+    float aimSpreadScale;       // 0x3d8
+    int shellshockIndex;        // 0x3dc
+    int shellshockTime;         // 0x3e0
+    int shellshockDuration;     // 0x3e4
+    objective_t objective[MAX_OBJECTIVES]; // 0x3E8
+    hudElemState_t hud;         // 0x5A8
+    int ping;                   // 0x20C8
+    int deltaTime;              // 0x20CC
 } playerState_t;
 
 typedef struct
@@ -1067,6 +1165,11 @@ static const int varpub_offset = 0x082f17d8;
 static const int vmpub_offset = 0x082f57e0;
 static const int gvm_offset = 0x080e30c4;
 static const int msgHuff_offset = 0x0813e740;
+static const int playerStateFields_offset = 0x080d229c;
+static const int entityStateFields_offset = 0x080d1760;
+static const int objectiveFields_offset = 0x080de384;
+static const int clientStateFields_offset = 0x080d2058;
+static const int archivedEntityFields_offset = 0x080d1ce0;
 
 #define com_frameTime (*((int*)(com_frameTime_offset)))
 #define fs_searchpaths (*((searchpath_t**)(fs_searchpaths_offset)))
@@ -1077,6 +1180,11 @@ static const int msgHuff_offset = 0x0813e740;
 #define svs (*((serverStatic_t*)(svs_offset)))
 #define gvm (*(vm_t**)(gvm_offset))
 #define msgHuff (*((huffman_t*)(msgHuff_offset)))
+#define playerStateFields (*((netField_t*)(playerStateFields_offset)))
+#define entityStateFields (*((netField_t*)(entityStateFields_offset)))
+#define objectiveFields (*((netField_t*)(objectiveFields_offset)))
+#define clientStateFields (*((netField_t*)( clientStateFields_offset )))
+#define archivedEntityFields (*((netField_t*)( archivedEntityFields_offset )))
 
 // Require structure sizes to match
 #if __GNUC__ >= 6

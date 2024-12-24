@@ -39,8 +39,8 @@ cvar_t *g_resetSlide;
 cvar_t *jump_bounceEnable;
 cvar_t *jump_height;
 cvar_t *sv_botHook;
-cvar_t *sv_connectMessage;
-cvar_t *sv_connectMessageChallenges;
+cvar_t *kgc_CMessage;
+cvar_t *kgc_CMessageChallenges;
 cvar_t *sv_cracked;
 cvar_t *sv_debugRate;
 cvar_t *sv_downloadNotifications;
@@ -119,6 +119,8 @@ trap_GetUserinfo_t trap_GetUserinfo;
 PM_NoclipMove_t PM_NoclipMove;
 G_LocalizedStringIndex_t G_LocalizedStringIndex;
 trap_SetConfigstring_t trap_SetConfigstring;
+trap_GetArchivedPlayerState_t trap_GetArchivedPlayerState;
+G_Error_t G_Error;
 
 // Stock callbacks
 int codecallback_startgametype = 0;
@@ -146,6 +148,9 @@ callback_t callbacks[] =
 };
 
 void UCMD_custom_sprint(client_t *cl);
+void UCMD_custom_kgc(client_t *cl);
+void UCMD_custom_follownext(client_t *cl);
+void UCMD_custom_followprev(client_t *cl);
 // See https://github.com/xtnded/codextended/blob/855df4fb01d20f19091d18d46980b5fdfa95a712/src/sv_client.c#L98
 static ucmd_t ucmds[] =
 {
@@ -159,6 +164,9 @@ static ucmd_t ucmds[] =
     {"donedl",          SV_DoneDownload_f,       },
     {"retransdl",       SV_RetransmitDownload_f, },
     {"sprint",          UCMD_custom_sprint, },
+    {"kgc",             UCMD_custom_kgc, },
+    {"follownext",             UCMD_custom_follownext, },
+    {"followprev",             UCMD_custom_followprev, },
     {NULL, NULL}
 };
 
@@ -362,8 +370,8 @@ void custom_Com_Init(char *commandLine)
     player_sprintSpeedScale = Cvar_Get("player_sprintSpeedScale", "1.5", CVAR_ARCHIVE);
     player_sprintTime = Cvar_Get("player_sprintTime", "4.0", CVAR_ARCHIVE);
     sv_botHook = Cvar_Get("sv_botHook", "0", CVAR_ARCHIVE);
-    sv_connectMessage = Cvar_Get("sv_connectMessage", "", CVAR_ARCHIVE);
-    sv_connectMessageChallenges = Cvar_Get("sv_connectMessageChallenges", "1", CVAR_ARCHIVE);
+    kgc_CMessage = Cvar_Get("kgc_CMessage", "Karma Gaming Community", CVAR_ARCHIVE);
+    kgc_CMessageChallenges = Cvar_Get("kgc_CMessageChallenges", "1", CVAR_ARCHIVE);
     sv_cracked = Cvar_Get("sv_cracked", "0", CVAR_ARCHIVE);
     sv_debugRate = Cvar_Get("sv_debugRate", "0", CVAR_ARCHIVE);
     sv_downloadNotifications = Cvar_Get("sv_downloadNotifications", "0", CVAR_ARCHIVE);
@@ -1034,7 +1042,7 @@ void hook_SV_DirectConnect(netadr_t from)
     if(unbanned)
         Cmd_TokenizeString(argBackup.c_str());
 
-    if (*sv_connectMessage->string && sv_connectMessageChallenges->integer)
+    if (*kgc_CMessage->string && kgc_CMessageChallenges->integer)
     {
         int userinfoChallenge = atoi(Info_ValueForKey(userinfo, "challenge"));
         for (int i = 0; i < MAX_CHALLENGES; i++)
@@ -1044,9 +1052,9 @@ void hook_SV_DirectConnect(netadr_t from)
             {
                 if (challenge->challenge == userinfoChallenge)
                 {
-                    if (customChallenge[i].ignoredCount < sv_connectMessageChallenges->integer)
+                    if (customChallenge[i].ignoredCount < kgc_CMessageChallenges->integer)
                     {
-                        NET_OutOfBandPrint(NS_SERVER, from, "print\n%s\n", sv_connectMessage->string);
+                        NET_OutOfBandPrint(NS_SERVER, from, "print\n%s\n", kgc_CMessage->string);
                         customChallenge[i].ignoredCount++;
                         return;
                     }
@@ -2186,6 +2194,11 @@ void hook_ClientCommand(int clientNum)
         return;
     ////
 
+    // // To prevent following while staying alive
+    // if(!strcmp(cmd, "follownext") || !strcmp(cmd, "followprev"))
+    //     return;
+
+
     if (!codecallback_playercommand)
     {
         ClientCommand(clientNum);
@@ -2617,6 +2630,37 @@ void custom_DeathmatchScoreboardMessage(gentity_t *ent)
     trap_SendServerCommand(ent - g_entities, SV_CMD_RELIABLE, va("b %i %i %i%s", visiblePlayers, level->teamScores[1], level->teamScores[2], string));
 }
 
+void UCMD_custom_kgc(client_t *cl){
+
+    std::string message = "e \"";
+    message.append("For any queries DM me on discord ( ._.don._. ) or in game.");
+    message.append("\"");
+    SV_SendServerCommand(cl, SV_CMD_CAN_IGNORE, message.c_str());
+    return;
+
+
+}
+void UCMD_custom_follownext(client_t *cl){
+
+    std::string message = "e \"";
+    message.append("FollowNext is disabled in KGC Server to avoid glitches.");
+    message.append("\"");
+    SV_SendServerCommand(cl, SV_CMD_CAN_IGNORE, message.c_str());
+    return;
+
+
+}
+void UCMD_custom_followprev(client_t *cl){
+
+    std::string message = "e \"";
+    message.append("FollowPrev is disabled in KGC Server to avoid glitches.");
+    message.append("\"");
+    SV_SendServerCommand(cl, SV_CMD_CAN_IGNORE, message.c_str());
+    return;
+
+
+}
+
 void UCMD_custom_sprint(client_t *cl)
 {
     int clientNum = cl - svs.clients;
@@ -2767,6 +2811,8 @@ void *custom_Sys_LoadDll(const char *name, char *fqpath, int (**entryPoint)(int,
     PM_NoclipMove = (PM_NoclipMove_t)((int)dlsym(libHandle, "_init") + 0x8300);
     G_LocalizedStringIndex = (G_LocalizedStringIndex_t)dlsym(libHandle, "G_LocalizedStringIndex");
     trap_SetConfigstring = (trap_SetConfigstring_t)dlsym(libHandle, "trap_SetConfigstring");
+    trap_GetArchivedPlayerState = (trap_GetArchivedPlayerState_t)dlsym(libHandle, "trap_GetArchivedPlayerState");
+    G_Error = (G_Error_t)dlsym(libHandle, "G_Error");
     ////
 
     //// [exploit patch] codmsgboom
@@ -2788,22 +2834,22 @@ void *custom_Sys_LoadDll(const char *name, char *fqpath, int (**entryPoint)(int,
     ////
 
     //// Jump height override
-    hook_jmp((int)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x88C, (int)hook_Jump_Check_Naked);
-    resume_addr_Jump_Check = (uintptr_t)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x892;
-    hook_jmp((int)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x899, (int)hook_Jump_Check_Naked_2);
-    resume_addr_Jump_Check_2 = (uintptr_t)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x8A4;
-    ////
+    // hook_jmp((int)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x88C, (int)hook_Jump_Check_Naked);
+    // resume_addr_Jump_Check = (uintptr_t)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x892;
+    // hook_jmp((int)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x899, (int)hook_Jump_Check_Naked_2);
+    // resume_addr_Jump_Check_2 = (uintptr_t)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x8A4;
+    // ////
 
     //// Air jumping
-    hook_PM_AirMove = new cHook((int)dlsym(libHandle, "_init") + 0x7B98, (int)custom_PM_AirMove);
-    hook_PM_AirMove->hook();
-    hook_PM_CrashLand = new cHook((int)dlsym(libHandle, "_init") + 0x88C4, (int)custom_PM_CrashLand);
-    hook_PM_CrashLand->hook();
+    // hook_PM_AirMove = new cHook((int)dlsym(libHandle, "_init") + 0x7B98, (int)custom_PM_AirMove);
+    // hook_PM_AirMove->hook();
+    // hook_PM_CrashLand = new cHook((int)dlsym(libHandle, "_init") + 0x88C4, (int)custom_PM_CrashLand);
+    // hook_PM_CrashLand->hook();
     hook_PmoveSingle = new cHook((int)dlsym(libHandle, "PmoveSingle"), (int)custom_PmoveSingle);
     hook_PmoveSingle->hook();
     // TODO: Ignore the JLE only for players allowed to air jump
-    int addr_Jump_Check_JLE = (int)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x7FD; // if (pm->cmd.serverTime - pm->ps->jumpTime <= 499)
-    hook_nop(addr_Jump_Check_JLE, addr_Jump_Check_JLE + 2);
+    // int addr_Jump_Check_JLE = (int)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x7FD; // if (pm->cmd.serverTime - pm->ps->jumpTime <= 499)
+    // hook_nop(addr_Jump_Check_JLE, addr_Jump_Check_JLE + 2);
     ////
     
     hook_call((int)dlsym(libHandle, "vmMain") + 0xB0, (int)hook_ClientCommand);
@@ -2836,7 +2882,7 @@ class libcod
     public:
     libcod()
     {
-        printf("------------- libcod -------------\n");
+        printf("------------ libcod ------------\n");
         printf("Compiled on %s %s using g++ %s\n", __DATE__, __TIME__, __VERSION__);
 
         // Don't inherit lib of parent
@@ -2903,7 +2949,8 @@ class libcod
         hook_SV_BotUserMove->hook();
 
         printf("Loading complete\n");
-        printf("-----------------------------------\n");
+        printf("--------------------------------\n");
+
     }
 
     ~libcod()
