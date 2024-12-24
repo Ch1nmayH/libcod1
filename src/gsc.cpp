@@ -93,6 +93,8 @@ scr_method_t scriptMethods[] =
 {
     //// Entity
     {"setBounds", gsc_entity_setbounds, 0},
+    {"setClipmask", gsc_entity_setclipmask, 0},
+    {"getClipmask", gsc_entity_getclipmask, 0},
     {"showToPlayer", gsc_entity_showtoplayer, 0},
     ////
 

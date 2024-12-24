@@ -887,11 +887,13 @@ struct gclient_s
 
 struct gentity_s
 {
-  entityState_t s;
-  entityShared_t r;
-  byte gap[4];
-  gclient_t *client;
-  byte gap2[440];
+    entityState_t s;        // 0x0
+    entityShared_t r;       // 0xF0
+    byte gap_0x154[0x4];
+    gclient_t *client;      // 0x158
+    byte gap_0x15C[0x34];
+    int clipmask;           // 0x190
+    byte gap_0x194[0x180];
 };
 
 typedef struct

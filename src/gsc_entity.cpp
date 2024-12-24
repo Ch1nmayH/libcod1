@@ -23,6 +23,21 @@ void gsc_entity_setbounds(scr_entref_t ref)
     stackPushBool(qtrue);
 }
 
+void gsc_entity_setclipmask(scr_entref_t ref)
+{
+    int id = ref.entnum;
+    gentity_t *ent = &g_entities[id];
+    ent->clipmask = Scr_GetInt(0);
+    stackPushBool(qtrue);
+}
+
+void gsc_entity_getclipmask(scr_entref_t ref)
+{
+    int id = ref.entnum;
+    gentity_t *ent = &g_entities[id];
+    stackPushInt(ent->clipmask);
+}
+
 void gsc_entity_showtoplayer(scr_entref_t ref) //TODO: try like cod2rev instead
 {
     int id = ref.entnum;
