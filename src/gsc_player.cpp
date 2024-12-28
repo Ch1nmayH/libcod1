@@ -405,6 +405,32 @@ void gsc_player_setspeed(scr_entref_t ref)
     stackPushBool(qtrue);
 }
 
+void gsc_player_setgravity(scr_entref_t ref)
+{
+    int id = ref.entnum;
+    int gravity;
+    if (!stackGetParams("i", &gravity))
+    {
+        stackError("gsc_player_setgravity() argument is undefined or has a wrong type");
+        stackPushUndefined();
+        return;
+    }
+    if (id >= MAX_CLIENTS)
+    {
+        stackError("gsc_player_setgravity() entity %i is not a player", id);
+        stackPushUndefined();
+        return;
+    }
+    if (gravity < 0)
+    {
+        stackError("gsc_player_setgravity() param must be equal or above zero");
+        stackPushUndefined();
+        return;
+    }
+    customPlayerState[id].gravity = gravity;
+    stackPushBool(qtrue);
+}
+
 void gsc_player_getfps(scr_entref_t ref)
 {
     int id = ref.entnum;

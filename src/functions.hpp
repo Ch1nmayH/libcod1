@@ -53,6 +53,9 @@ extern BG_AnimationIndexForString_t BG_AnimationIndexForString;
 
 typedef int (*BG_AnimScriptEvent_t)(playerState_t *ps, scriptAnimEventTypes_t event, int isContinue, int force);
 extern BG_AnimScriptEvent_t BG_AnimScriptEvent;
+
+typedef void (*BG_AddPredictableEventToPlayerstate_t)(int newEvent, int eventParm, playerState_t *ps);
+extern BG_AddPredictableEventToPlayerstate_t BG_AddPredictableEventToPlayerstate;
 ////
 
 //// Cmd

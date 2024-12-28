@@ -3,7 +3,7 @@
 #include "cracking.hpp"
 #include "shared.hpp"
 
-// Stock cvars
+//// Cvars
 cvar_t *com_cl_running;
 cvar_t *com_dedicated;
 cvar_t *com_logfile;
@@ -27,7 +27,10 @@ cvar_t *sv_serverid;
 cvar_t *sv_showAverageBPS;
 cvar_t *sv_showCommands;
 
-// Custom cvars
+// VM
+vmCvar_t *bg_fallDamageMaxHeight;
+vmCvar_t *bg_fallDamageMinHeight;
+// Custom
 cvar_t *airjump_heightScale;
 cvar_t *fs_callbacks;
 cvar_t *fs_callbacks_additional;
@@ -52,7 +55,8 @@ cvar_t *player_sprintMinTime;
 cvar_t *player_sprintSpeedScale;
 cvar_t *player_sprintTime;
 
-// Game lib objects
+//// Game lib
+// Objects
 gentity_t *g_entities;
 gclient_t *g_clients;
 level_locals_t *level;
@@ -60,7 +64,7 @@ pmove_t **pm;
 pml_t *pml;
 stringIndex_t *scr_const;
 
-// Game lib functions
+// Functions
 G_Say_t G_Say;
 G_RegisterCvars_t G_RegisterCvars;
 G_AddEvent_t G_AddEvent;
@@ -73,6 +77,7 @@ BG_GetInfoForWeapon_t BG_GetInfoForWeapon;
 BG_GetWeaponIndexForName_t BG_GetWeaponIndexForName;
 BG_AnimationIndexForString_t BG_AnimationIndexForString;
 BG_AnimScriptEvent_t BG_AnimScriptEvent;
+BG_AddPredictableEventToPlayerstate_t BG_AddPredictableEventToPlayerstate;
 Scr_GetFunctionHandle_t Scr_GetFunctionHandle;
 Scr_GetNumParam_t Scr_GetNumParam;
 Scr_IsSystemActive_t Scr_IsSystemActive;
@@ -122,29 +127,32 @@ trap_SetConfigstring_t trap_SetConfigstring;
 trap_GetArchivedPlayerState_t trap_GetArchivedPlayerState;
 G_Error_t G_Error;
 
-// Stock callbacks
+//// Callbacks
 int codecallback_startgametype = 0;
 int codecallback_playerconnect = 0;
 int codecallback_playerdisconnect = 0;
 int codecallback_playerdamage = 0;
 int codecallback_playerkilled = 0;
 
-// Custom callbacks
 int codecallback_client_spam = 0;
 int codecallback_playercommand = 0;
 int codecallback_playerairjump = 0;
+int codecallback_playercrashland = 0;
 
 callback_t callbacks[] =
-{
+{   
+    // Stock
     {&codecallback_startgametype, "CodeCallback_StartGameType", false},
     {&codecallback_playerconnect, "CodeCallback_PlayerConnect", false},
     {&codecallback_playerdisconnect, "CodeCallback_PlayerDisconnect", false},
     {&codecallback_playerdamage, "CodeCallback_PlayerDamage", false},
     {&codecallback_playerkilled, "CodeCallback_PlayerKilled", false},
-
+    
+    // Custom
     {&codecallback_client_spam, "CodeCallback_CLSpam", true},
     {&codecallback_playercommand, "CodeCallback_PlayerCommand", true},
-    {&codecallback_playerairjump, "CodeCallback_PlayerAirJump", true}
+     {&codecallback_playerairjump, "CodeCallback_PlayerAirJump", true},
+    {&codecallback_playercrashland, "CodeCallback_PlayerCrashLand", true},
 };
 
 void UCMD_custom_sprint(client_t *cl);
@@ -180,7 +188,6 @@ cHook *hook_Com_Init;
 cHook *hook_DeathmatchScoreboardMessage;
 cHook *hook_GScr_LoadGameTypeScript;
 cHook *hook_PM_AirMove;
-cHook *hook_PM_CrashLand;
 cHook *hook_PM_FlyMove;
 cHook *hook_PmoveSingle;
 cHook *hook_SV_AddOperatorCommands;
@@ -2295,7 +2302,10 @@ void custom_ClientEndFrame(gentity_t *ent)
 
         if(customPlayerState[clientNum].speed > 0)
             ent->client->ps.speed = customPlayerState[clientNum].speed;
-        
+
+         if(customPlayerState[clientNum].gravity > 0)
+            ent->client->ps.gravity = customPlayerState[clientNum].gravity;
+
         if(customPlayerState[clientNum].sprintActive)
             ent->client->ps.speed *= player_sprintSpeedScale->value;
         
@@ -2390,21 +2400,201 @@ void hook_PM_ClipVelocity_bounce(const float *in, const float *normal, float *ou
         PM_ClipVelocity(in, normal, out, overbounce);
 }
 
+// Attempting rewrite PM_CrashLand for callback with damage value
+#if 0
+int PM_GroundSurfaceType(pml_t *pml)
+{
+    if ( (pml->groundTrace.surfaceFlags & 0x20) != 0 )
+        return 0;
+    else
+        return (pml->groundTrace.surfaceFlags & 0x1F00000) >> 20;
+}
+int PM_DamageLandingForSurface(pml_t *pml)
+{
+    return PM_GroundSurfaceType(pml) + 116;
+}
+int PM_ClampFallDamageMax(int x, int y, int z)
+{
+    if ( x < 0 )
+        return z;
+    return y;
+}
+int PM_ClampFallDamage(int val, int min, int max)
+{
+    int x;
+    x = PM_ClampFallDamageMax(val - max, max, val);
+    return PM_ClampFallDamageMax(min - val, min, x);
+}
+
+
 void custom_PM_CrashLand()
 {
-    int clientNum = (*pm)->ps->clientNum;
+     printf("##### custom_PM_CrashLand\n")
+    int dmg;
+    int hardDmg;
+    int lightDmg;
+    int medDmg;
+    float gravity;
+    float landVel;
+    int stunTime;
+    int damage;
+    int viewDip;
+    float fSpeedMult;
+    float den;
+    float acc;
+    float t;
+    float vel;
+    float dist;
+    float fallHeight;
+    
+    if ((*pm)->waterlevel != 3)
+    {
+        if(!(*pm)->ps->legsTimer && pml.previous_velocity[2] < -220)
+            BG_AnimScriptEvent((*pm)->ps, ANIM_ET_LAND, qfalse, qtrue);
+        dist = pml->previous_origin[2] - (*pm)->origin[2];
+        vel = pml->previous_velocity[2];
+        gravity = (float)(*pm)->gravity;
+        acc = -gravity * 0.5;
+        den = vel * vel - acc * 4.0 * dist;
+        if (den >= 0.0)
+        {
+            t = (-vel - sqrt(den)) / (acc + acc);
+            landVel = t * -gravity + vel;
+            fallHeight = -landVel * -landVel / ((float)(*pm)->gravity + (float)(*pm)->gravity);
+            if((*pm)->debugLevel)
+                Com_Printf("landing vel: %.1f fall height: %.1f\n", (double)landVel, (double)fallHeight);
+            
+            if (bg_fallDamageMinHeight->current.decimal < (float)bg_fallDamageMaxHeight->current.decimal && bg_fallDamageMinHeight->current.decimal >= 0.0)
+            {
+                if (bg_fallDamageMinHeight->current.decimal >= (float)fallHeight
+                    || (pml->groundTrace.surfaceFlags & 1) != 0
+                    || (*pm)->pm_type > PM_INTERMISSION)
+                {
+                    damage = 0;
+                }
+                else if (fallHeight < (float)bg_fallDamageMaxHeight->current.decimal)
+                {
+                    damage = PM_ClampFallDamage(
+                        (int)((fallHeight - bg_fallDamageMinHeight->current.decimal)
+                        / (bg_fallDamageMaxHeight->current.decimal - bg_fallDamageMinHeight->current.decimal)
+                        * 100.0), 0, 100);
+                }
+                else
+                {
+                    damage = 100;
+                }
+            }
+            else
+            {
+                Com_Printf("bg_fallDamageMaxHeight and bg_fallDamageMinHeight have bad values\n");
+                damage = 0;
+            }
+            if((*pm)->waterlevel == 2)
+                delta *= 0.5;
+            if (fallHeight > 12.0)
+            {
+                viewDip = (int)((fallHeight - 12.0) / 26.0 * 4.0 + 4.0);
+                if(viewDip > 24)
+                    viewDip = 24;
+            }
+            else
+            {
+                viewDip = 0;
+            }
+            // check macos build
+            /*
+            v22 = pm;
+            v24 = *(float *)(*(_DWORD *)pm + 104);
+            v25 = v24 < -0.001;
+            v26 = 0;
+            v27 = v24 == -0.001;
+            if ( (HIBYTE(v23) & 0x45) == 1 || v24 > 0.001 )
+            {
+                *(_DWORD *)(*(_DWORD *)pm + 16) = 200;
+                *(_BYTE *)(*(_DWORD *)v22 + 13) |= 0x20u;
+            }
+            */
+            if (damage)
+            {
+                if((*pm)->debugLevel)
+                    Com_Printf("falling damage: %i\n", damage);
+                if (damage > 99 || (pml->groundTrace.surfaceFlags & 2) != 0)
+                {
+                    VectorScale((*pm)->velocity, 0.67000002, (*pm)->velocity);
+                }
+                else
+                {
+                    stunTime = 35 * damage + 500;
+                    if(stunTime > 2000)
+                        stunTime = 2000;
+                    if (stunTime > 500)
+                    {
+                        if(stunTime <= 1499)
+                            fSpeedMult = 0.5 - ((float)stunTime - 500.0) / 1000.0 * 0.30000001;
+                        else
+                            fSpeedMult = 0.2;
+                    }
+                    else
+                    {
+                        fSpeedMult = 0.5;
+                    }
+                    if((*pm)->debugLevel > 1)
+                        Com_Printf("landing stun time: %i speed mult: %.2f\n", stunTime, (double)fSpeedMult);
+                    (*pm)->pm_time = stunTime;
+                    (*pm)->pm_flags |= 1u;
+                    VectorScale((*pm)->velocity, fSpeedMult, (*pm)->velocity);
+                    /*
+                    v31 = *(_DWORD *)v30;
+                    v32 = v29 * *(float *)(*(_DWORD *)v30 + 40);
+                    */
+                }
+                //*(float *)(v31 + 40) = v32;
+                if ((pml->groundTrace.surfaceFlags & 0x20) != 0)
+                    dmg = 0;
+                else
+                    dmg = (pml->groundTrace.surfaceFlags & 0x1F00000) >> 20;
+                BG_AddPredictableEventToPlayerstate(dmg, damage, (*pm));
+            }
+            else if ( fallHeight > 4.0 )
+            {
+                if ( fallHeight >= 8.0 )
+                {
+                    if ( fallHeight >= 12.0 )
+                    {
+                        VectorScale(pm->velocity, 0.67000002, pm->velocity);
+                        hardDmg = PM_HardLandingForSurface(pml);
+                        BG_AddPredictableEventToPlayerstate(hardDmg, viewDip, pm);
+                    }
+                    else
+                    {
+                        medDmg = PM_MediumLandingForSurface(pml);
+                        PM_AddEvent(pm, medDmg);
+                    }
+                }
+                else
+                {
+                    lightDmg = PM_LightLandingForSurface(pml);
+                    PM_AddEvent(pm, lightDmg);
+                }
+            }
+        }
+    }
+    
+    /*int clientNum = (*pm)->ps->clientNum;
     if (customPlayerState[clientNum].overrideJumpHeight_air)
     {
         // Player landed an airjump, disable overrideJumpHeight_air
         customPlayerState[clientNum].overrideJumpHeight_air = false;
     }
     
-    hook_PM_CrashLand->unhook();
-    void (*PM_CrashLand)();
-    *(int*)&PM_CrashLand = hook_PM_CrashLand->from;
-    PM_CrashLand();
-    hook_PM_CrashLand->hook();
+      if (codecallback_playercrashland)
+    {
+        gentity_t *gentity = &g_entities[(*pm)->ps->clientNum];
+        short ret = Scr_ExecEntThread(gentity, codecallback_playercrashland, 0);
+        Scr_FreeThread(ret);
+    }*/
 }
+#endif
 
 /* See:
 - https://github.com/voron00/CoD2rev_Server/blob/b012c4b45a25f7f80dc3f9044fe9ead6463cb5c6/src/bgame/bg_weapons.cpp#L481
@@ -2750,6 +2940,9 @@ void *custom_Sys_LoadDll(const char *name, char *fqpath, int (**entryPoint)(int,
     pm = (pmove_t**)dlsym(libHandle, "pm");
     pml = (pml_t*)dlsym(libHandle, "pml");
     scr_const = (stringIndex_t*)dlsym(libHandle, "scr_const");
+     // VM cvars
+    bg_fallDamageMinHeight = (vmCvar_t*)dlsym(libHandle, "bg_fallDamageMinHeight");
+    bg_fallDamageMaxHeight = (vmCvar_t*)dlsym(libHandle, "bg_fallDamageMaxHeight");
     ////
 
     //// Functions
@@ -2782,6 +2975,7 @@ void *custom_Sys_LoadDll(const char *name, char *fqpath, int (**entryPoint)(int,
     BG_GetWeaponIndexForName = (BG_GetWeaponIndexForName_t)dlsym(libHandle, "BG_GetWeaponIndexForName");
     BG_AnimationIndexForString = (BG_AnimationIndexForString_t)dlsym(libHandle, "BG_AnimationIndexForString");
     BG_AnimScriptEvent = (BG_AnimScriptEvent_t)dlsym(libHandle, "BG_AnimScriptEvent");
+    BG_AddPredictableEventToPlayerstate = (BG_AddPredictableEventToPlayerstate_t)dlsym(libHandle, "BG_AddPredictableEventToPlayerstate");
     Scr_IsSystemActive = (Scr_IsSystemActive_t)dlsym(libHandle, "Scr_IsSystemActive");
     Scr_GetInt = (Scr_GetInt_t)dlsym(libHandle, "Scr_GetInt");
     Scr_GetString = (Scr_GetString_t)dlsym(libHandle, "Scr_GetString");
@@ -2833,24 +3027,29 @@ void *custom_Sys_LoadDll(const char *name, char *fqpath, int (**entryPoint)(int,
     hook_call((int)dlsym(libHandle, "G_Say") + 0x791, (int)hook_G_Say);
     ////
 
-    //// Jump height override
-    // hook_jmp((int)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x88C, (int)hook_Jump_Check_Naked);
-    // resume_addr_Jump_Check = (uintptr_t)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x892;
-    // hook_jmp((int)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x899, (int)hook_Jump_Check_Naked_2);
-    // resume_addr_Jump_Check_2 = (uintptr_t)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x8A4;
-    // ////
-
-    //// Air jumping
-    // hook_PM_AirMove = new cHook((int)dlsym(libHandle, "_init") + 0x7B98, (int)custom_PM_AirMove);
-    // hook_PM_AirMove->hook();
-    // hook_PM_CrashLand = new cHook((int)dlsym(libHandle, "_init") + 0x88C4, (int)custom_PM_CrashLand);
-    // hook_PM_CrashLand->hook();
+     // For sprint
     hook_PmoveSingle = new cHook((int)dlsym(libHandle, "PmoveSingle"), (int)custom_PmoveSingle);
     hook_PmoveSingle->hook();
-    // TODO: Ignore the JLE only for players allowed to air jump
-    // int addr_Jump_Check_JLE = (int)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x7FD; // if (pm->cmd.serverTime - pm->ps->jumpTime <= 499)
-    // hook_nop(addr_Jump_Check_JLE, addr_Jump_Check_JLE + 2);
+
+      //// Jump height override
+    hook_jmp((int)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x88C, (int)hook_Jump_Check_Naked);
+    resume_addr_Jump_Check = (uintptr_t)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x892;
+    hook_jmp((int)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x899, (int)hook_Jump_Check_Naked_2);
+    resume_addr_Jump_Check_2 = (uintptr_t)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x8A4;
     ////
+
+    #if 0
+    hook_jmp((int)dlsym(libHandle, "_init") + 0x88C4, (int)custom_PM_CrashLand);
+    #endif
+    /*//// Air jumping
+     hook_PM_AirMove = new cHook((int)dlsym(libHandle, "_init") + 0x7B98, (int)custom_PM_AirMove);
+     hook_PM_AirMove->hook();
+     hook_PM_CrashLand = new cHook((int)dlsym(libHandle, "_init") + 0x88C4, (int)custom_PM_CrashLand);
+     hook_PM_CrashLand->hook();
+     TODO: Ignore the JLE only for players allowed to air jump
+     int addr_Jump_Check_JLE = (int)dlsym(libHandle, "BG_PlayerTouchesItem") + 0x7FD; // if (pm->cmd.serverTime - pm->ps->jumpTime <= 499)
+     hook_nop(addr_Jump_Check_JLE, addr_Jump_Check_JLE + 2);
+     ////*/
     
     hook_call((int)dlsym(libHandle, "vmMain") + 0xB0, (int)hook_ClientCommand);
     hook_call((int)dlsym(libHandle, "ClientEndFrame") + 0x311, (int)hook_StuckInClient);

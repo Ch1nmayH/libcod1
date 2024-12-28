@@ -129,6 +129,7 @@ scr_method_t scriptMethods[] =
     {"isOnLadder", gsc_player_isonladder, 0},
     {"setSpeed", gsc_player_setspeed, 0},
     {"setJumpHeight", gsc_player_setjumpheight, 0},
+    {"setGravity", gsc_player_setgravity, 0},
     {"getAirJumps", gsc_player_getairjumps, 0},
     {"setAirJumps", gsc_player_setairjumps, 0},
     {"noClip", gsc_player_noclip, 0},

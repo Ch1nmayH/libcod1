@@ -44,6 +44,7 @@
 #define MAX_HUDELEMENTS             31
 #define MAX_HUDELEMS_ARCHIVAL       MAX_HUDELEMENTS
 #define MAX_HUDELEMS_CURRENT        MAX_HUDELEMENTS
+#define MAX_CVAR_VALUE_STRING       256
 
 #define CVAR_NOFLAG             0               // 0
 #define CVAR_ARCHIVE            (1 << 0)        // 1
@@ -220,6 +221,17 @@ typedef struct cvar_s
     struct cvar_s *next;
     struct cvar_s *hashNext;
 } cvar_t;
+
+typedef int cvarHandle_t;
+
+typedef struct
+{
+    cvarHandle_t handle;
+    int modificationCount;
+    float value;
+    int integer;
+    char string[MAX_CVAR_VALUE_STRING];
+} vmCvar_t;
 
 union VariableUnion
 {
@@ -1125,20 +1137,34 @@ typedef enum
 
 struct pmove_t
 {
-    playerState_t *ps;
-    usercmd_t cmd;
+    playerState_t *ps;  // 0x0
+    usercmd_t cmd;      // 0x4
+    usercmd_t oldcmd;   // 0x1C
+    int tracemask;      // 0x34
+    int debugLevel;     // 0x38
+    int numtouch;       // 0x3C
+    int touchents[32];  // 0x40
+    vec3_t mins;        // 0xC0
+    vec3_t maxs;        // 0xCC
+    byte watertype;     // 0xd8
+    byte waterlevel;    // 0xd9
     //...
 };
 
 struct pml_t
 {
-    vec3_t forward;
-    vec3_t right;
-    vec3_t up;
-    float frametime;
-    int msec;
-    int walking;
-    int groundPlane;
+    vec3_t forward;         // 0x0
+    vec3_t right;           // 0xC
+    vec3_t up;              // 0x18
+    float frametime;        // 0x24
+    int msec;               // 0x28
+    int walking;            // 0x2C
+    int groundPlane;        // 0x30
+    int almostGroundPlane;  // 0x34
+    trace_t groundTrace;    // 0x38
+    float impactSpeed;      // 0x68
+    vec3_t previous_origin;
+    vec3_t previous_velocity;
     //...
 };
 
@@ -1185,8 +1211,8 @@ static const int archivedEntityFields_offset = 0x080d1ce0;
 #define playerStateFields (*((netField_t*)(playerStateFields_offset)))
 #define entityStateFields (*((netField_t*)(entityStateFields_offset)))
 #define objectiveFields (*((netField_t*)(objectiveFields_offset)))
-#define clientStateFields (*((netField_t*)( clientStateFields_offset )))
-#define archivedEntityFields (*((netField_t*)( archivedEntityFields_offset )))
+#define clientStateFields (*((netField_t*)(clientStateFields_offset)))
+#define archivedEntityFields (*((netField_t*)(archivedEntityFields_offset)))
 
 // Require structure sizes to match
 #if __GNUC__ >= 6
@@ -1242,6 +1268,7 @@ typedef struct customPlayerState_s
     char botUpMove;
     ////
     int speed;
+    int gravity;
     int fps;
     int frames;
     uint64_t frameTime;

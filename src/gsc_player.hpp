@@ -23,6 +23,7 @@ void gsc_player_processclientcommand(scr_entref_t ref);
 void gsc_player_dropclient(scr_entref_t ref);
 void gsc_player_setspeed(scr_entref_t ref);
 void gsc_player_setjumpheight(scr_entref_t ref);
+void gsc_player_setgravity(scr_entref_t ref);
 void gsc_player_setairjumps(scr_entref_t ref);
 void gsc_player_getairjumps(scr_entref_t ref);
 void gsc_player_getfps(scr_entref_t ref);
