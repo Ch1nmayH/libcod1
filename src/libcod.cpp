@@ -165,8 +165,8 @@ static ucmd_t ucmds[] =
     {"retransdl",       SV_RetransmitDownload_f, },
     {"sprint",          UCMD_custom_sprint, },
     {"kgc",             UCMD_custom_kgc, },
-    {"follownext",             UCMD_custom_follownext, },
-    {"followprev",             UCMD_custom_followprev, },
+    {"follownext",      UCMD_custom_follownext, },
+    {"followprev",      UCMD_custom_followprev, },
     {NULL, NULL}
 };
 
